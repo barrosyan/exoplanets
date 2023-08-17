@@ -7,7 +7,12 @@ from scipy.optimize import curve_fit
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-from sklearn.cluster import KMeans
+import tensorflow as tf
+from sklearn.utils import shuffle
+from kerastuner.tuners import RandomSearch
+from sklearn.metrics import mean_squared_error
+from lime.lime_tabular import LimeTabularExplainer
+import shap
 
 # Load data
 filename = 'PS_2023.08.14_09.36.52.csv'
@@ -28,17 +33,19 @@ def explore_data(data):
 
 explore_data(exoplanets)
 
+print('--------------------------------')
+print('Data Analysis Section')
+
 print("""
 Hypothesis 1:
  
 The methods of exoplanet discovery exhibit significant
 differences in terms of the number of discoveries.
-
 """)
 
 def visualize_distributions(data, methods):
     num_methods = len(methods)
-    fig, axes = plt.subplots(nrows=num_methods, ncols=1, figsize=(20, 18*num_methods))
+    fig, axes = plt.subplots(nrows=num_methods, ncols=1, figsize=(10, 3*num_methods))
 
     for idx, method in enumerate(methods.keys()):
         ax = axes[idx]
@@ -52,6 +59,41 @@ def visualize_distributions(data, methods):
     plt.tight_layout()
     plt.show()
 
+def analyze_discovery_methods(data):
+    # Create a contingency table for discovery methods
+    contingency_table = pd.crosstab(data['discoverymethod'], columns='count')
+
+    # Perform Chi-Square Test
+    chi2_stat, p_val, dof, expected = chi2_contingency(contingency_table)
+    print("Chi-Square Test Results:")
+    print(f"Chi-Square Statistic: {chi2_stat}")
+    print(f"P-Value: {p_val}")
+
+    # Create boolean masks for each discovery method
+    methods = {
+        'Radial Velocity': data['discoverymethod'] == 'Radial Velocity',
+        'Imaging': data['discoverymethod'] == 'Imaging',
+        'Eclipse Timing Variations': data['discoverymethod'] == 'Eclipse Timing Variations',
+        'Transit': data['discoverymethod'] == 'Transit',
+        'Astrometry': data['discoverymethod'] == 'Astrometry',
+        'Disk Kinematics': data['discoverymethod'] == 'Disk Kinematics',
+        'Microlensing': data['discoverymethod'] == 'Microlensing',
+        'Orbital Brightness Modulation': data['discoverymethod'] == 'Orbital Brightness Modulation',
+        'Pulsation Timing Variations': data['discoverymethod'] == 'Pulsation Timing Variations',
+        'Transit Timing Variations': data['discoverymethod'] == 'Transit Timing Variations',
+        'Pulsar Timing': data['discoverymethod'] == 'Pulsar Timing'
+    }
+
+    # Perform ANOVA
+    anova_results = f_oneway(*[data[mask].count() for mask in methods.values()])
+    print("\nANOVA Test Results:")
+    print(f"F-Statistic: {anova_results.statistic}")
+    print(f"P-Value: {anova_results.pvalue}")
+
+    visualize_distributions(data, methods)
+
+analyze_discovery_methods(exoplanets)
+
 print(""" 
 Insights:
 
@@ -64,14 +106,14 @@ with Kruskal-Wallis and re-evaluated the results.
 2.This can be interpreted as an indication that exoplanet discovery 
 methods are indeed yielding different outcomes in terms of discovery 
 counts, providing support for the analysis that the non-parametric 
-distributions exhibit significant differences.""")
+distributions exhibit significant differences.
+""")
 
 print(
 """
 Hypothesis 2:
 
 The distribution of exoplanet masses follows a normal distribution.
-
 """)
 
 def analyze_exoplanet_masses(data):
@@ -120,7 +162,6 @@ data. Researchers should consider exploring outlier identification,
 data transformation, or robust statistical methods to handle the
 potential influence of these outliers and non-normal distribution
 characteristics in further analyses.
-
 """)
 
 print("""
@@ -128,7 +169,6 @@ Hypothesis 3:
 
 There is a positive correlation between the exoplanet mass
 and the mass of the host star.
-  
 """)
 
 def analyze_correlation(data):
@@ -161,14 +201,12 @@ exoplanets with larger masses tend to orbit host stars with larger
 masses. However, it's important to note that other factors may influence
 this relationship and that correlation does not necessarily imply a
 cause-and-effect relationship between exoplanet and star masses.
-
 """)
 
 print("""
 Hypothesis 4:
   
 The masses of exoplanets differ between systems with different numbers of stars.
-
 """)
 
 def provide_insights(p_value):
@@ -210,14 +248,12 @@ to reject the null hypothesis that the exoplanet masses are
 equal between the two groups. Therefore, I did not find
 statistically significant differences in exoplanet masses 
 between systems with different numbers of host stars.
-
 """)
 
 """
 Hypothesis 5:
 
 The relationship between semi-major axis and orbital period follows Kepler's law.
-
 """
 
 def polynomial_func(x, a, b, c):
@@ -254,7 +290,6 @@ def analyze_keplers_law(data):
 
 analyze_keplers_law(exoplanets)
 
-
 print("""
 Insights:
 
@@ -267,14 +302,12 @@ Kepler's Law, which describes the relationship between the orbital parameters of
 a planetary system. Therefore, we can conclude that the results support the idea
 that Kepler's Law provides an accurate description of the relationship between
 Semi-Major Axis and Orbital Period of the analyzed exoplanets.
-
 """)
 
 print("""
 Hypothesis 6:
 
 The distributions of visual magnitude, infrared magnitudes, and Gaia magnitude are different.
-
 """)
 
 def provide_insights(p_visual_infrared, p_visual_gaia, p_infrared_gaia):
@@ -323,13 +356,10 @@ def compare_magnitudes_distributions(data):
     # Provide insights based on the KS test results
     provide_insights(p_visual_infrared, p_visual_gaia, p_infrared_gaia)
 
-
 print("""
-
 Hypothesis 7:
 
 There is a relationship between the distance and the visual magnitude of host stars.
-
 """)
 
 def provide_insights(r_squared):
@@ -381,7 +411,6 @@ print("""
 Hypothesis 8:
 
 There is a temporal trend in the discoveries of exoplanets over the years.
-
 """)
 
 def plot_exoplanet_discoveries_by_year(data):
@@ -412,14 +441,12 @@ specific years. It would be beneficial to investigate historical records,
 scientific publications, and announcements related to exoplanet research during
 those years to gain a better understanding of the specific factors that contributed
 to the observed increases.
-
 """)
 
 print("""
 Hypothesis 9:
       
 There is a difference in stellar properties among different discovery methods.
-
 """)
 
 def stellar_parameters_by_discovery_method(data):
@@ -454,8 +481,6 @@ def stellar_parameters_by_discovery_method(data):
     plt.show()
 
 stellar_parameters_by_discovery_method(exoplanets)
-
-#Dimensionality Reduction and Clustering
 
 def dimensionality_reduction_and_clustering(data):
     selected_columns = ['pl_orbper', 'pl_rade', 'pl_radj', 'pl_bmasse', 'st_teff', 'st_rad', 'st_mass', 'st_met', 'st_logg', 'sy_dist', 'st_spectype']
@@ -540,3 +565,330 @@ def histogram_(data):
   plt.show()
 
 histogram_(exoplanets)
+
+print('-------------------------------------------------')
+print('Machine Learning Section')
+
+selected_columns = [
+    'sy_snum', 'sy_pnum', 'pl_orbper', 'pl_orbsmax', 'pl_rade', 'pl_bmasse',
+    'pl_bmassj', 'pl_orbeccen', 'pl_insol', 'st_teff', 'st_rad', 'st_mass',
+    'st_met', 'st_logg', 'ra', 'dec', 'sy_dist', 'sy_vmag', 'sy_kmag', 'sy_gaiamag'
+]
+data = exoplanets[selected_columns].dropna()
+
+def corr_vis(data):
+    # Visualize correlation
+    correlation_matrix = data.corr()
+    plt.figure(figsize=(30, 20))
+    sns.set(font_scale=1.2)
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
+    plt.title('Matrix Correlation Diagram')
+    plt.show()
+
+corr_vis(data)
+
+input_data = data[['pl_orbsmax', 'pl_rade', 'pl_bmasse', 'st_teff', 'st_met', 'dec']].values
+output_data = data['pl_orbper'].values
+
+def build_model(input_data, output_data):
+    # Standardize input data
+    scaler = StandardScaler()
+    normalized_input_data = scaler.fit_transform(input_data)
+
+    # Build NN architecture
+    n_input = input_data.shape[1]
+    n_output = 1
+    n_hidden = [10, 10]
+    activation = 'relu'
+    initializer = 'he_normal'
+
+    input_layer = tf.keras.layers.Input(shape=(n_input,))
+    hidden_layer = input_layer
+    for units in n_hidden:
+        hidden_layer = tf.keras.layers.Dense(units, activation=activation, kernel_initializer=initializer)(hidden_layer)
+    output_layer = tf.keras.layers.Dense(n_output, kernel_initializer=initializer)(hidden_layer)
+    neural_net = tf.keras.models.Model(inputs=input_layer, outputs=output_layer)
+    predicted_orbper = neural_net(input_layer)
+
+    # Train model
+    model = tf.keras.models.Model(inputs=input_layer, outputs=predicted_orbper)
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(normalized_input_data, output_data, epochs=20000, verbose=1)
+    
+    # Visualize loss function
+    plt.plot(model.history.history['loss'])
+    plt.title('Loss Function')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.show()
+
+    # Searching for Best Hyperparameter
+    def build_model(hp):
+        model = tf.keras.Sequential()
+        model.add(tf.keras.layers.Input(shape=(n_input,)))
+
+        # Tune the number of hidden layers and units per layer
+        for i in range(hp.Int('num_hidden_layers', min_value=1, max_value=5)):
+            model.add(tf.keras.layers.Dense(units=hp.Int('units_' + str(i), min_value=10, max_value=100, step=10),
+                                           activation='relu'))
+
+        model.add(tf.keras.layers.Dense(n_output, activation='linear'))
+        model.compile(optimizer='adam', loss='mse')
+        return model
+
+    tuner = RandomSearch(
+        build_model,
+        objective='val_loss',
+        max_trials=10,
+        directory='tuner_results',
+        project_name='exoplanets')
+
+    tuner.search(normalized_input_data, output_data, epochs=100, validation_split=0.2)
+
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    print("Best Hyperparameters:", best_hps.values)
+
+    final_model = tuner.hypermodel.build(best_hps)
+    final_model.fit(normalized_input_data, output_data, epochs=100, validation_split=0.2)
+
+    # Checking Loss Function for new Model
+    plt.plot(final_model.history.history['loss'])
+    plt.title('Loss Function')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.show()
+
+    # Visualizing Best Model Architecture
+    final_model.summary()
+
+    return final_model, normalized_input_data
+
+final_model, normalized_input_data = build_model(input_data, output_data)
+
+def vis_pred(final_model, normalized_input_data):
+    # Visualize correlation between real and predicted values
+    predicted_values = final_model.predict(normalized_input_data)
+    plt.scatter(output_data, predicted_values)
+    plt.xlabel('Real')
+    plt.ylabel('Predicted')
+    plt.title('Real Values vs. Predicted Values')
+    plt.show()
+
+    # Visualize predictions
+    plt.plot(output_data, label='Real')
+    plt.plot(predicted_values, label='Predicted')
+    plt.title('Real Values vs. Predicted Values')
+    plt.legend()
+    plt.show()
+
+# Analyze sensitivity
+labels = ['Semimajor Axis', 'Planet Radius', 'Planet Mass', 'Stellar Effective Temperature', 'Stellar Metallicity', 'Declination']
+example_idx = 0
+example_input = normalized_input_data[example_idx]
+
+def analyze_sensitivity(model, input_data, example_idx, labels):
+    example_input = input_data[example_idx]
+    for i, label in enumerate(labels):
+        feature_idx = i
+        vary_range = np.linspace(0.8 * example_input[feature_idx], 1.2 * example_input[feature_idx], num=50)
+        variable = label
+        predictions = []
+
+        for value in vary_range:
+            modified_input = example_input.copy()
+            modified_input[feature_idx] = value
+            prediction = model.predict(np.array([modified_input]))
+            predictions.append(prediction[0][0])
+
+        plt.plot(vary_range, predictions)
+        plt.xlabel(f'Variation on {variable}')
+        plt.ylabel('Orbit Prediction')
+        plt.title('Sensitivity of Variable on Prediction')
+        plt.show()
+
+analyze_sensitivity(final_model, normalized_input_data, example_idx, labels)
+
+def permutation_imp(model):
+    # Permutation Importance
+    n_permutations = 30
+    importances = []
+
+    for _ in range(n_permutations):
+        shuffled_output = shuffle(output_data, random_state=0)
+        model.fit(normalized_input_data, shuffled_output, epochs=100, verbose=0)
+        shuffled_predictions = model.predict(normalized_input_data)
+        importance = mean_squared_error(output_data, shuffled_predictions)
+        importances.append(importance)
+
+    average_importance = np.mean(importances)
+    print("Mean Influence of Variables:")
+    print(average_importance)
+    if average_importance > 10000.:
+        print("High Significancy on those Variables")
+    else:
+        print("Low Significancy on those Variables")
+
+permutation_imp(final_model)
+
+def explainer_ind(normalized_input_data, model):
+    # LimeTabularExplainer for Individual Instances
+    explainer = LimeTabularExplainer(normalized_input_data, mode="regression")
+
+    num_entries = 10
+    feature_values = {}
+
+    for example_idx in range(num_entries):
+        explanation = explainer.explain_instance(normalized_input_data[example_idx], model.predict)
+        feature_values[example_idx] = explanation.local_exp[1]  # Obtém os pesos das características
+
+    print("feature_values =", feature_values)
+
+    feature_mapping = {
+        0: "pl_orbsmax",
+        1: "pl_rade",
+        2: "pl_bmasse",
+        3: "st_teff",
+        4: "st_met",
+        5: "dec"
+    }
+
+    physical_mapping = {
+        "pl_orbsmax": "Semimajor Axis",
+        "pl_rade": "Planet Radius",
+        "pl_bmasse": "Planet Mass",
+        "st_teff": "Stellar Effective Temperature",
+        "st_met": "Stellar Metallicity",
+        "dec": "Declination"
+    }
+
+    for example_idx, values in feature_values.items():
+        print(f"Entry {example_idx} Analysis:")
+    
+        for idx, value in values:
+            feature_name = feature_mapping[idx]
+            physical_name = physical_mapping[feature_name]
+        
+            influence = "Positive" if value > 0 else "Negative"
+        
+            print(f"{physical_name}: {influence} Impact: {value}")
+    
+    print("------------------------------------")
+
+explainer_ind(normalized_input_data, final_model):
+
+def analyze_errors(normalized_input_data=normalized_input_data, final_model=final_model):
+    # Analyzing Prediction Errors
+    predicted_values = final_model.predict(normalized_input_data)
+    errors = predicted_values - output_data
+
+    plt.scatter(output_data, errors[0])
+    plt.xlabel('Real Value')
+    plt.ylabel('Error')
+    plt.title('Prediction Errors')
+    plt.show()
+
+analyze_errors()
+
+def checking_relevance(input_data=normalized_input_data, output_data=output_data):
+    # Correlation Matrix Heatmap
+    correlation_matrix = np.corrcoef(input_data.T, output_data)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(correlation_matrix, annot=True, xticklabels=['pl_orbsmax', 'pl_rade', 'pl_bmasse', 'st_teff', 'st_met', 'dec', 'pl_orbper'], yticklabels=['pl_orbsmax', 'pl_rade', 'pl_bmasse', 'st_teff', 'st_met', 'dec', 'pl_orbper'])
+    plt.title('Correlation Matrix Heatmap')
+    plt.show()
+
+    # Feature Influences for Entry 0
+    feature_names = [
+        'Stellar Metallicity', 
+        'Planet Mass', 
+        'Stellar Effective Temperature', 
+        'Declination', 
+        'Planet Radius', 
+        'Semimajor Axis'
+        ]
+    influences_entry_0 = [
+        -41.35655194605194, 
+        -37.049456362808904, 
+        35.86883501867438, 
+        35.454882955404784, 
+        -11.29755847376939, 
+        0.08430690613074271
+        ]
+
+    plt.barh(feature_names, influences_entry_0, color=['g' if i > 0 else 'r' for i in influences_entry_0])
+    plt.xlabel('Impact Value')
+    plt.ylabel('Features')
+    plt.title('Feature Influences for Entry 0')
+    plt.show()
+
+
+
+def curve_fitting(normalized_input_data=normalized_input_data):
+    # Curve Fitting - Exponential Function
+    def exponential_function(x, a, b):
+        return a * np.exp(b * x)
+
+    params, _ = curve_fit(exponential_function, normalized_input_data[:, 0], output_data)
+
+    plt.scatter(normalized_input_data[:, 0], output_data, label='Real Data')
+    plt.plot(normalized_input_data[:, 0], exponential_function(normalized_input_data[:, 0], *params), label='Exponential Adjust', color='red')
+    plt.xlabel('Input Feature')
+    plt.ylabel('Output Value')
+    plt.title('Exponential Function Adjusted')
+    plt.legend()
+    plt.show()
+
+    print("Adjusted Equation Coefficients:", params)
+
+curve_fitting()
+
+def new_model(final_model=final_model):
+    # New Model with Modified Architecture
+    hidden_layer = tf.keras.layers.Dense(10, activation='relu')(final_model.input)
+    output_layer = tf.keras.layers.Dense(1)(hidden_layer)
+    new_model = tf.keras.models.Model(inputs=final_model.input, outputs=output_layer)
+    new_model.compile(optimizer='adam', loss='mse')
+
+    intermediate_layer_model = tf.keras.models.Model(inputs=new_model.input, outputs=hidden_layer)
+    intermediate_output = intermediate_layer_model.predict(input_data)
+
+    plt.figure(figsize=(10, 5))
+    plt.imshow(intermediate_output[:10], cmap='viridis', aspect='auto')
+    plt.colorbar()
+    plt.xlabel("Hidden Layer Units")
+    plt.ylabel("Input Samples")
+    plt.title("Intermediate Layer Activations")
+    plt.show()
+
+    # Heatmap of Intermediate Activations
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(intermediate_output, cmap='viridis', cbar=True)
+    plt.xlabel("Hidden Layer Units")
+    plt.ylabel("Input Samples")
+    plt.title("Heatmap of Intermediate Activations")
+    plt.show()
+
+    # Combined Data and Correlation Heatmap
+    combined_data = np.hstack((normalized_input_data, intermediate_output))
+    all_feature_names = feature_names + ['Activation_' + str(i) for i in range(intermediate_output.shape[1])]
+    combined_df = pd.DataFrame(data=combined_data, columns=all_feature_names)
+    correlations = combined_df.corr()
+
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(correlations, annot=True, cmap='coolwarm')
+    plt.title("Correlation Heatmap between Input Variables and Intermediate Activations")
+    plt.show()
+
+def explainingai(model=final_model)
+
+    explainer = shap.Explainer(model, normalized_input_data)
+    shap_values = explainer(normalized_input_data)
+
+    shap.summary_plot(shap_values, normalized_input_data)
+
+    # SHAP (SHapley Additive exPlanations) Visualization
+    explainer = shap.Explainer(final_model, normalized_input_data)
+    shap_values = explainer(normalized_input_data)
+    shap.summary_plot(shap_values, normalized_input_data)
+
+    checking_relevance()

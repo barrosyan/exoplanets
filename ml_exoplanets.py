@@ -23,14 +23,16 @@ selected_columns = [
 ]
 data = exoplanets[selected_columns].dropna()
 
-# Visualize correlation
-correlation_matrix = data.corr()
-plt.figure(figsize=(30, 20))
-sns.set(font_scale=1.2)
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
-plt.title('Matrix Correlation Diagram')
-plt.show()
+def corr_vis(data):
+    # Visualize correlation
+    correlation_matrix = data.corr()
+    plt.figure(figsize=(30, 20))
+    sns.set(font_scale=1.2)
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
+    plt.title('Matrix Correlation Diagram')
+    plt.show()
 
+corr_vis(data)
 # Prepare input and output data
 input_data = data[['pl_orbsmax', 'pl_rade', 'pl_bmasse', 'st_teff', 'st_met', 'dec']].values
 output_data = data['pl_orbper'].values
